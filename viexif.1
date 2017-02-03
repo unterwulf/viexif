@@ -1,0 +1,143 @@
+.\"
+.\" Copyright (c) 2017 Vitaly Sinilin <vs@kp4.ru>
+.\"
+.TH viexif 1 "2 February 2017" viexif
+.SH NAME
+viexif \- Mass edit Exif tags with your favorite text editor
+.SH SYNOPSIS
+.B viexif
+.RB [ -u ]
+.RB [ -d ]
+[\fB-a\fR|[\fB-k \fIKEY\fR] [\fB-f
+.IR KEYFILE ]]
+.IR FILE ...
+.br
+.B viexif
+.B -b
+.RB [ -C
+.IR FILE ]
+[\fIBATCHFILE\fR...]
+.br
+.SH DESCRIPTION
+.B viexif
+is a shell script that allows manipulating Exif tags right from your favorite
+text editor. It has two modes: interactive and batch.
+
+In interactive mode it generates a text file (batch file) that contains current
+values of the specified Exif keys in 
+.IR FILE (s)
+and opens it in your
+text editor. When you quit the editor viexif checks whether the file has been
+changed and if so processes modified text file in batch mode.
+
+In batch mode it reads specified batch files (or the standard input if no files
+are specified) and execute commands they contain (see
+.B BATCH FILE FORMAT
+below).
+
+Internally it uses the great 
+.B exiv2
+tool.
+.br
+.SH OPTIONS
+.TP
+.B -h
+Display short help and exit.
+.TP
+.B -V
+Show the script version and exit.
+.TP
+.B -u
+Don't comment out existing keys in generated batch file. The default behavior
+is to have all keys commented out to avoid pointless resetting to the same
+values.
+.TP
+.B -a
+List values of all existing keys. This is the default behavior if no
+.BR -k " or " -f
+options are specified and no default key list file exists. This option is useful
+when you need to ignore default key list file (see
+.B FILES
+below).
+.TP
+.B -k \fIKEY
+List values of the specified key. This option can be specified multiple times.
+.TP
+.B -f \fIKEYFILE
+Like \fB-f\fR but read list of keys from \fIKEYFILE\fR. The file should contain
+one key per line. If both \fB-k\fR and \fB-f\fR are specified their actions are
+cumulative. Default key list file is ignored when any of this options is specified.
+.TP
+.B -d
+Don't run editor. Just generate a batch file and dump it into the standard
+output. This is the default behavior when the standard output is not a terminal.
+.TP
+.B -b
+Run in batch mode.
+.TP
+.BI -C " FILE"
+(Batch mode only.) Apply all common commands from all specified batch files to
+.IR FILE .
+.SH BATCH FILE FORMAT
+A batch file is a text file that has one command per line. Empty lines and lines
+beginning with hash (#) are ignored.
+
+The command is one of the following:
+.TP
+.BI File " FILE"
+Selects
+.I FILE
+as the current file. All commands up to the next
+.B File
+command will be applied to it.
+.TP
+.B File.Mtime \fIYYYY:MM:DD hh:mm:ss
+Sets modification time of the current file. The time format is the same as of Exif
+DateTime* keys in order to be easy comparable with them by human eyes.
+.TP
+[\fB-\fR]\fIKEY VALUE
+Sets the Exif key
+.I KEY
+value in the current file to
+.IR VALUE .
+The key name should be in the exiv2 notation
+without \fBExif.\fR prefix. If the command has leading dash (\fB-\fR), the specified
+key will be deleted from the current file.
+.LP
+All commands that come before the first
+.B File
+command are considered common and applied to every file mentioned in the batch file.
+.SH ENVIRONMENT VARIABLES
+.TP
+.B EDITOR
+Text editor which is run to edit generated batch file in interactive mode,
+\fBvi\fR by default.
+.SH FILES
+.TP
+.BR ~/.viexifkeylist " or " ~/.config/viexif/keylist
+Default key list file that is used if no \fB-a\fR, \fB-k\fR, or \fB-f\fR
+options are specified. Only a first found file is used.
+.SH EXAMPLES
+Interactively modify Exif tags of all jpg files in the current directory.
+.IP
+.B viexif *.jpg
+.LP
+For all jpg files in the current directory copy the Image.Date key value into
+the Photo.DateTimeDigitized key value.
+.IP
+.B viexif -k Image.Date *.jpg \\\\
+.br
+.B | sed 's/^#Image.Date /Photo.DateTimeDigitized /' \\\\
+.br
+.B | viexif -b
+.SH BUGS
+viexif cannot manipulate values that have leading or trailing whitespace
+characters or contain newlines. Filenames and key values are subject to this
+restriction.
+
+Each command-line option has to be specified separately with its own dash.
+.SH AUTHOR
+Written by Vitaly Sinilin <vs@kp4.ru>
+.LP
+.SH SEE ALSO
+exiv2(1)

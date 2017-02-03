@@ -1,0 +1,219 @@
+#!/bin/sh
+#
+# viexif, Copyright (c) 2017 Vitaly Sinilin
+#
+# Mass edit Exif tags with your favorite text editor.
+#
+
+version=0.0.1
+all_keys=no
+default_file=
+keys=
+keyfile=
+tmpfiles=
+mode="interactive"
+comment="#"
+cr="
+"
+usage()
+{
+	echo "usage: ${0##*/} [-u] [-a|[-k KEY]... [-f KEYFILE]] [-d] FILE..." >&2
+	echo "       ${0##*/} -b [-C FILE] [BATCHFILE...]" >&2
+	exit 1
+}
+
+show_version()
+{
+	echo "${0##*/} $version"
+	exit 1
+}
+
+while [ $# -gt 0 ]; do
+	case $1 in
+		-a) all_keys=yes;;
+		-u) comment="";;
+		-k) shift; keys="$1$cr$keys";;
+		-f) shift; keyfile="$1";;
+		-h|--help) usage;;
+		-V|--version) show_version;;
+		-b) mode="batch";;
+		-d) mode="generate";;
+		-C) shift; default_file="$1";;
+		--) shift; break;;
+		-*) echo "invalid option '$1'" >&2; exit 2;;
+		*)  break;;
+	esac
+	shift
+done
+
+if [ $# -eq 0 ] && [ "$mode" != "batch" ]; then
+	usage
+fi
+
+onexit()
+{
+	[ -n "$tmpfiles" ] && rm -rf "$tmpfiles"
+}
+
+generate_keylist()
+{
+	if [ -n "$keys" ] || [ -n "$keyfile" ]; then
+		if [ -n "$keyfile" ]; then
+			if [ ! -e "$keyfile" ]; then
+				echo "$keyfile: keyfile doesn't exist" >&2
+				exit 1
+			fi
+			cat "$keyfile"
+		fi
+		echo "$keys"
+	elif [ -e ~/.viexifkeylist ]; then
+		cat ~/.viexifkeylist
+	elif [ -e ~/.config/viexif/keylist ]; then
+		cat ~/.config/viexif/keylist
+	fi | sort -u | sed '/^#/d;/^$/d'
+}
+
+getmtime() { stat -c %Y -- "$1"; }
+
+generate_batch()
+{
+	args=
+	if [ "$all_keys" != "yes" ]; then
+		keylistfile=${TMPDIR:-/tmp}/viexif-keylist.$$
+		tmpfiles="$tmpfiles $keylistfile"
+		generate_keylist > "$keylistfile"
+		if [ -s "$keylistfile" ]; then
+			args=$(sed "s/^/-g Exif./" "$keylistfile")
+			echo "# Requested keys were:"
+			sed "s/^/#   /" "$keylistfile"
+			echo
+		fi
+	fi
+
+	for file; do
+		if [ ! -e "$file" ]; then
+			echo "# File $file doesn't exist"
+		else
+			echo "File $file"
+			printf "$comment%-41s%s\n" \
+				"File.Mtime" \
+				"$(date -d @$(getmtime "$file") "+%Y:%m:%d %H:%M:%S")"
+			exiv2 -Pkv $args -- "$file" | sed "s/^Exif\\./$comment/"
+		fi
+		echo
+	done
+}
+
+interactive_mode()
+{
+	batch=${TMPDIR:-/tmp}/viexif.$$
+	tmpfiles="$tmpfiles $batch"
+	generate_batch "$@" > "$batch"
+
+	omtime=$(getmtime "$batch")
+	${EDITOR:-vi} "$batch"
+	mtime=$(getmtime "$batch")
+
+	if [ "$omtime" = "$mtime" ]; then
+		echo "Nothing to be done."
+	else
+		# No exec here because we need our trap to be called when
+		# work is done.
+		$0 -b "$batch"
+	fi
+}
+
+exif2tstamp()
+{
+	savedIFS=$IFS
+	IFS=": "
+	set $1
+	IFS=$savedIFS
+	printf "%04u%02u%02u%02u%02u.%02u" "$1" "$2" "$3" "$4" "$5" "$6"
+}
+
+commit_changes()
+{
+	[ -n "$2" ] && [ -s "$1" ] && exiv2 -k -m "$1" -- "$2"
+}
+
+process_batch_line()
+{
+	case $1 in
+		"File.Mtime")
+			tstamp=$(exif2tstamp "$2")
+			touch -t $tstamp -- "$file"
+			;;
+		-*)
+			echo "del Exif.$1" >> "$cmdfile"
+			;;
+		*)
+			echo "set Exif.$1 $2" >> "$cmdfile"
+			;;
+	esac
+}
+
+process_batch()
+{
+	> "$cmdfile"
+	file=$default_file
+	has_common=no
+
+	while read key value; do
+		case $key in
+			"#"*|"") # Skip comments and empty lines.
+				;;
+			"File")
+				# Common only mode is done when the first File
+				# command is met.
+				[ -n "$default_file" ] && break
+
+				# Commit pending changes before switching to
+				# the next file.
+				commit_changes "$cmdfile" "$file"
+
+				# Reset pending changes and switch current file
+				> "$cmdfile"
+				file=$value
+
+				# If the batch file contains common commands
+				# they need to be executed now.
+				[ "$has_common" = yes ] && $0 -C "$file" -b "$batch"
+				;;
+			*)
+				if [ -z "$file" ]; then
+					has_common=yes
+				else
+					process_batch_line "$key" "$value"
+				fi
+				;;
+		esac
+	done
+
+	# Commit pending changes to the last file.
+	commit_changes "$cmdfile" "$file"
+}
+
+batch_mode()
+{
+	cmdfile=${TMPDIR:-/tmp}/viexif-cmd.$$
+	tmpfiles="$tmpfile $cmdfile"
+
+	if [ $# -eq 0 ]; then
+		process_batch
+	else
+		for batch; do
+			process_batch < "$batch"
+		done
+	fi
+}
+
+trap onexit EXIT
+
+if [ "$mode" = "batch" ]; then
+	batch_mode "$@"
+elif [ -t 1 ] && [ "$mode" != "generate" ]; then
+	interactive_mode "$@"
+else
+	generate_batch "$@"
+fi

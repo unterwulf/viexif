@@ -1,0 +1,17 @@
+viexif, Copyright (c) 2017 by Vitaly Sinilin. All rights reserved.
+Published under the terms of the MIT License.
+
+viexif is a shell script that allows manipulating Exif tags right from
+your favorite text editor.
+
+
+INSTALLATION
+
+To install the script system-wide type
+
+   sudo make install
+
+
+USAGE
+
+Find details in the manual page (viexif.1).
