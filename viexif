@@ -117,7 +117,7 @@ generate_batch()
 interactive_mode()
 {
 	tmpfile batch
-	generate_batch "$@" > "$batch"
+	generate_batch "$@" > "$batch" || exit 1
 
 	omtime=$(getmtime "$batch")
 	${EDITOR:-vi} "$batch"
