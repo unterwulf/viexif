@@ -10,7 +10,7 @@ all_keys=no
 default_file=
 keys=
 keyfile=
-tmpfiles=
+tmpfilevars=
 mode="interactive"
 comment="#"
 cr="
@@ -52,7 +52,18 @@ fi
 
 onexit()
 {
-	[ -n "$tmpfiles" ] && rm -rf "$tmpfiles"
+	for var in $tmpfilevars; do
+		eval rm -f '"$'$var'"'
+	done
+}
+
+tmpfile()
+{
+	# A filename may contain spaces, so we cannot store filenames in
+	# a space-separated list. Instead we will maintain a space-separated
+	# list of names of variables containing names of temporal files.
+	eval $1='${TMPDIR:-/tmp}/viexif-$$.$1'
+	tmpfilevars="$tmpfilevars $1"
 }
 
 generate_keylist()
@@ -79,8 +90,7 @@ generate_batch()
 {
 	args=
 	if [ "$all_keys" != "yes" ]; then
-		keylistfile=${TMPDIR:-/tmp}/viexif-keylist.$$
-		tmpfiles="$tmpfiles $keylistfile"
+		tmpfile keylistfile
 		generate_keylist > "$keylistfile"
 		if [ -s "$keylistfile" ]; then
 			args=$(sed "s/^/-g Exif./" "$keylistfile")
@@ -106,8 +116,7 @@ generate_batch()
 
 interactive_mode()
 {
-	batch=${TMPDIR:-/tmp}/viexif.$$
-	tmpfiles="$tmpfiles $batch"
+	tmpfile batch
 	generate_batch "$@" > "$batch"
 
 	omtime=$(getmtime "$batch")
@@ -196,8 +205,7 @@ process_batch()
 
 batch_mode()
 {
-	cmdfile=${TMPDIR:-/tmp}/viexif-cmd.$$
-	tmpfiles="$tmpfile $cmdfile"
+	tmpfile cmdfile
 
 	if [ $# -eq 0 ]; then
 		process_batch
