@@ -93,9 +93,11 @@ generate_batch()
 		tmpfile keylistfile
 		generate_keylist > "$keylistfile"
 		if [ -s "$keylistfile" ]; then
-			args=$(sed "s/^/-g Exif./" "$keylistfile")
 			echo "# Requested keys were:"
-			sed "s/^/#   /" "$keylistfile"
+			while read key; do
+				args="$args -g Exif.$key"
+				echo "#   $key"
+			done < "$keylistfile"
 			echo
 		fi
 	fi
