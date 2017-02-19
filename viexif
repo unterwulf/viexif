@@ -5,7 +5,7 @@
 # Mass edit Exif tags with your favorite text editor.
 #
 
-version=0.0.1
+version=0.0.2
 all_keys=no
 default_file=
 keys=
